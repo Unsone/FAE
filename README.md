@@ -87,7 +87,16 @@ python -m fae bc \
   --output fae_runs/grid
 ```
 
-The console reports `grid: 2 normalizer x 2 reducer x 1 selector x 3 feature number x 2 classifier = 24 models`, then prints a summary sorted by test AUC. Besides the per-split CSVs, the output folder gets `summary.csv`, which joins CV and test metrics for every model into one table.
+The console reports `grid: 2 normalizer x 2 reducer x 1 selector x 3 feature number x 2 classifier = 24 models`, then prints a summary sorted by test AUC. Besides the per-split CSVs, the output folder gets `summary.csv`, which joins CV and test metrics for every model into one table. Use `--top N` to print only the first N rows while `summary.csv` keeps everything.
+
+To sweep every component on the bundled example data:
+
+```bash
+bash scripts/run_full_grid.sh                      # 1440 models, ~30-60 min
+bash scripts/run_full_grid.sh fae_runs/fast "10"   # 360 models
+```
+
+The script excludes the `none` normalizer by default: raw radiomics features span many orders of magnitude and make SVM / Gaussian process / MLP training extremely slow. Override it if you really want that baseline: `NORMALIZERS="none zscore minmax mean" bash scripts/run_full_grid.sh`.
 
 Useful flags: `--test-data reference.csv` to split by a reference case list instead of randomly, `--no-hyper-param` to skip the nested grid search, and `--help` to list every choice. `pipeline_info.csv`, `*_results.csv`, `summary.csv`, predictions, models and `run_config.json` are written to the output folder.
 

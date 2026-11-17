@@ -271,6 +271,11 @@ def build_parser():
     )
     bc.add_argument("--quiet", action="store_true", help="hide progress lines")
     bc.add_argument(
+        "--top",
+        type=_positive_int,
+        help="print only the first N rows of the summary (summary.csv keeps all)",
+    )
+    bc.add_argument(
         "--debug", action="store_true", help="print the full traceback on error"
     )
 
@@ -442,8 +447,15 @@ def run_bc(args):
 
     summary = _write_summary(output)
     if summary is not None and not summary.empty:
+        shown = summary if args.top is None else summary.head(args.top)
         print("\n[SUMMARY] sorted by test AUC")
-        print(summary.reset_index().to_string(index=False))
+        print(shown.reset_index().to_string(index=False))
+        if args.top is not None and len(summary) > len(shown):
+            print(
+                "[FAE] showing top {} of {} models; see summary.csv for the rest".format(
+                    len(shown), len(summary)
+                )
+            )
 
     config = {
         "fae_version": __version__,

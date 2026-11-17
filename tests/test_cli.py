@@ -103,6 +103,8 @@ def test_bc_enumerates_grid(tmp_path):
             "lr",
             "nb",
             "--no-hyper-param",
+            "--top",
+            "1",
             "--quiet",
         ]
     )
