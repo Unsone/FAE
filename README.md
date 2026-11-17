@@ -24,23 +24,65 @@ The Windows64 version and the Ubuntut 20.04 release could be found [Google Drive
 
 ## Installation
 
+FAE ships two dependency sets:
+
+| Use case | Install |
+| --- | --- |
+| Headless modelling (Linux server, notebooks, CI) | `requirements.txt` |
+| Workstation with the Qt GUI | `requirements-gui.txt` |
+
+### Headless (recommended for servers)
+
 ```bash
-git clone https://github.com/salan668/FAE.git
+git clone https://github.com/Unsone/FAE.git
 cd FAE
-conda create -n fae python=3.11
+conda create -n fae python=3.11 -y
 conda activate fae
 pip install -r requirements.txt
 ```
 
-## Running
+The headless set does not include PySide6, SimpleITK or pyradiomics, so it installs on any Python 3.11 environment without a display.
+
+### Workstation with GUI
 
 ```bash
+pip install -r requirements-gui.txt
+```
+
+PySide6 6.11 wheels require glibc >= 2.34 (Ubuntu 22.04 or newer). pyradiomics is excluded from both lists: version 3.0.1 has no CPython 3.11 wheel and has to be built manually; only the feature-extraction pages need it.
+
+## Running (headless CLI)
+
+```bash
+python -m fae info
+python -m fae bc --data Example/numeric_feature.csv --output fae_runs/example --seed 2026
+```
+
+A more explicit pipeline:
+
+```bash
+python -m fae bc \
+  --data Example/numeric_feature.csv \
+  --test-ratio 0.3 --seed 2026 \
+  --balance none --normalizer zscore \
+  --reducer pcc --selector anova \
+  --feature-numbers 5 10 20 \
+  --classifier svm --cv 5 \
+  --output fae_runs/example
+```
+
+Useful flags: `--test-data reference.csv` to split by a reference case list instead of randomly, `--no-hyper-param` to skip the nested grid search, and `--help` to list every choice. The console prints CV and test metrics; `pipeline_info.csv`, `*_results.csv`, predictions, models and `run_config.json` are written to the output folder.
+
+## Running (GUI)
+
+```bash
+python -m pip install -r requirements-gui.txt
 python MainFrameCall.py
 ```
 
 ## Generating UI Files
 
-The `.py` modules corresponding to each `.ui` file are checked into the repository for convenience, but must be regenerated whenever a `.ui` file is modified. Use the `pyside6-uic` tool that ships with PySide6:
+The `.py` modules corresponding to each `.ui` file must be generated locally (they are git-ignored, so a fresh clone has none of them). Use the `pyside6-uic` tool that ships with PySide6:
 
 ```bash
 pyside6-uic HomeUI/HomePage.ui                    -o HomeUI/HomePage.py
@@ -87,10 +129,29 @@ FAE/
 ├── Plugin/                   # Plugin launcher
 │   └── PluginManager.py      # Discovers plugins via config.json, runs via os.system()
 ├── Utility/                  # Shared utilities (logging, path helpers, radiomics utils)
+├── fae/                      # Headless command line interface (python -m fae)
+├── scripts/                  # Maintenance scripts (requirement export)
 ├── src/                      # Image assets (PNG icons for the UI)
 ├── Example/                  # Sample data
-└── requirements.txt
+├── pyproject.toml            # Dependencies (uv)
+├── uv.lock                   # Locked dependency graph
+├── requirements.txt          # Server / headless pip list (generated)
+└── requirements-gui.txt      # GUI pip list (generated)
 ```
+
+## Dependencies
+
+Dependencies are managed with [uv](https://docs.astral.sh/uv/) and locked in `pyproject.toml` / `uv.lock`. The pip requirement files are generated, never edited by hand:
+
+```bash
+uv add <package>                        # runtime dependency
+uv add --dev <package>                  # test / tooling dependency
+uv sync                                 # local headless environment
+uv sync --extra gui                     # local environment with the Qt GUI
+python scripts/export_requirements.py   # regenerate requirements*.txt
+```
+
+Commit `pyproject.toml`, `uv.lock`, `requirements.txt` and `requirements-gui.txt` together.
 
 ## License 
 This project is licensed under the Apache 2.0 License
