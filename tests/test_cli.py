@@ -70,8 +70,53 @@ def test_bc_runs_end_to_end(tmp_path):
         config = json.load(stream)
     assert config["seed"] == 7
     assert config["cv"] == 3
-    assert config["classifier"] == "lr"
+    assert config["classifiers"] == ["lr"]
+    assert config["grid_size"] == 1
     assert config["train_cases"] + config["test_cases"] == 60
+
+    summary = pd.read_csv(output / "summary.csv", encoding="utf-8")
+    assert len(summary) == 1
+    assert {"Model", "CV_AUC", "TEST_AUC"} <= set(summary.columns)
+
+
+def test_bc_enumerates_grid(tmp_path):
+    data = write_feature_csv(tmp_path / "features.csv", case_count=80)
+    output = tmp_path / "grid"
+
+    code = main(
+        [
+            "bc",
+            "--data",
+            str(data),
+            "--output",
+            str(output),
+            "--cv",
+            "3",
+            "--seed",
+            "7",
+            "--feature-numbers",
+            "1",
+            "--normalizer",
+            "zscore",
+            "minmax",
+            "--classifier",
+            "lr",
+            "nb",
+            "--no-hyper-param",
+            "--quiet",
+        ]
+    )
+
+    assert code == 0
+    summary = pd.read_csv(output / "summary.csv", encoding="utf-8")
+    assert len(summary) == 4
+    assert summary["Model"].is_unique
+
+    with open(output / "run_config.json", encoding="utf-8") as stream:
+        config = json.load(stream)
+    assert config["normalizers"] == ["zscore", "minmax"]
+    assert config["classifiers"] == ["lr", "nb"]
+    assert config["grid_size"] == 4
 
 
 def test_bc_rejects_missing_file(tmp_path):

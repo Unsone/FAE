@@ -71,7 +71,25 @@ python -m fae bc \
   --output fae_runs/example
 ```
 
-Useful flags: `--test-data reference.csv` to split by a reference case list instead of randomly, `--no-hyper-param` to skip the nested grid search, and `--help` to list every choice. The console prints CV and test metrics; `pipeline_info.csv`, `*_results.csv`, predictions, models and `run_config.json` are written to the output folder.
+### Enumerating a grid in one command
+
+`--normalizer`, `--reducer`, `--selector`, `--feature-numbers` and `--classifier` accept multiple values. The command runs the full Cartesian product in one go (`--balance` stays single, matching the GUI):
+
+```bash
+python -m fae bc \
+  --data Example/numeric_feature.csv \
+  --normalizer zscore minmax \
+  --reducer none pcc \
+  --selector anova \
+  --feature-numbers 5 10 20 \
+  --classifier lr svm \
+  --cv 5 --seed 2026 \
+  --output fae_runs/grid
+```
+
+The console reports `grid: 2 normalizer x 2 reducer x 1 selector x 3 feature number x 2 classifier = 24 models`, then prints a summary sorted by test AUC. Besides the per-split CSVs, the output folder gets `summary.csv`, which joins CV and test metrics for every model into one table.
+
+Useful flags: `--test-data reference.csv` to split by a reference case list instead of randomly, `--no-hyper-param` to skip the nested grid search, and `--help` to list every choice. `pipeline_info.csv`, `*_results.csv`, `summary.csv`, predictions, models and `run_config.json` are written to the output folder.
 
 ## Running (GUI)
 

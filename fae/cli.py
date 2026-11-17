@@ -216,9 +216,30 @@ def build_parser():
     )
     bc.add_argument("--seed", type=int, default=2026, help="random seed for the split")
     bc.add_argument("--balance", choices=BALANCE_CHOICES, default="none")
-    bc.add_argument("--normalizer", choices=NORMALIZER_CHOICES, default="zscore")
-    bc.add_argument("--reducer", choices=REDUCER_CHOICES, default="none")
-    bc.add_argument("--selector", choices=SELECTOR_CHOICES, default="none")
+    bc.add_argument(
+        "--normalizer",
+        choices=NORMALIZER_CHOICES,
+        nargs="+",
+        default=["zscore"],
+        metavar="NAME",
+        help="one or more normalizers (default: zscore)",
+    )
+    bc.add_argument(
+        "--reducer",
+        choices=REDUCER_CHOICES,
+        nargs="+",
+        default=["none"],
+        metavar="NAME",
+        help="one or more dimension reducers (default: none)",
+    )
+    bc.add_argument(
+        "--selector",
+        choices=SELECTOR_CHOICES,
+        nargs="+",
+        default=["none"],
+        metavar="NAME",
+        help="one or more feature selectors (default: none)",
+    )
     bc.add_argument(
         "--feature-numbers",
         type=_positive_int,
@@ -226,7 +247,14 @@ def build_parser():
         default=[1],
         help="feature counts to evaluate, e.g. --feature-numbers 5 10 20",
     )
-    bc.add_argument("--classifier", choices=CLASSIFIER_CHOICES, default="lr")
+    bc.add_argument(
+        "--classifier",
+        choices=CLASSIFIER_CHOICES,
+        nargs="+",
+        default=["lr"],
+        metavar="NAME",
+        help="one or more classifiers (default: lr)",
+    )
     bc.add_argument("--cv", type=_positive_int, default=5, help="cross-validation folds")
     bc.add_argument(
         "--hyper-param-dir",
@@ -259,21 +287,37 @@ def _default_output(data_path):
     return Path.cwd() / "fae_runs" / "{}_{}".format(data_path.stem, stamp)
 
 
-def _print_table(path, title):
-    if not path.is_file():
-        return
-    frame = pd.read_csv(path, encoding="utf-8")
-    if frame.empty:
-        return
-    if frame.columns[0].startswith("Unnamed"):
-        frame = frame.rename(columns={frame.columns[0]: "Model"})
-    columns = [
-        name
-        for name in ("Model", AUC, ACC, SEN, SPE, MCC)
-        if name in frame.columns
-    ]
-    print("\n[{}]".format(title))
-    print(frame[columns].to_string(index=False))
+def _unique(values):
+    seen = set()
+    result = []
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result
+
+
+def _write_summary(output):
+    """Join CV and test metrics of every pipeline into one sorted table."""
+    cv_path = output / "cv_val_results.csv"
+    test_path = output / "test_results.csv"
+    if not (cv_path.is_file() and test_path.is_file()):
+        return None
+
+    metrics = [AUC, ACC, SEN, SPE, MCC]
+    cv_frame = pd.read_csv(cv_path, index_col=0)
+    test_frame = pd.read_csv(test_path, index_col=0)
+    cv_frame = cv_frame[[name for name in metrics if name in cv_frame.columns]]
+    test_frame = test_frame[[name for name in metrics if name in test_frame.columns]]
+    summary = cv_frame.add_prefix("CV_").join(
+        test_frame.add_prefix("TEST_"), how="outer"
+    )
+    sort_column = "TEST_{}".format(AUC)
+    if sort_column in summary.columns:
+        summary = summary.sort_values(sort_column, ascending=False)
+    summary.index.name = "Model"
+    summary.to_csv(output / "summary.csv", encoding="utf-8")
+    return summary
 
 
 def run_bc(args):
@@ -331,13 +375,35 @@ def run_bc(args):
         else GetClassifierHyperParams(args.hyper_param_dir)
     )
 
+    normalizers = _unique(args.normalizer)
+    reducers = _unique(args.reducer)
+    selectors = _unique(args.selector)
+    feature_numbers = _unique(args.feature_numbers)
+    classifiers = _unique(args.classifier)
+
+    if len(feature_numbers) > 1 and all(name == "none" for name in selectors):
+        print(
+            "[FAE] --selector none ignores --feature-numbers; using {}".format(
+                feature_numbers[0]
+            )
+        )
+        feature_numbers = [feature_numbers[0]]
+
+    grid_size = (
+        len(normalizers)
+        * len(reducers)
+        * len(selectors)
+        * len(feature_numbers)
+        * len(classifiers)
+    )
+
     manager = PipelinesManager(
         balancer=build_balance(args.balance, seeds),
-        normalizer_list=[build_normalizer(args.normalizer)],
-        dimension_reduction_list=[build_reducer(args.reducer)],
-        feature_selector_list=[build_selector(args.selector)],
-        feature_selector_num_list=list(args.feature_numbers),
-        classifier_list=[build_classifier(args.classifier, seeds)],
+        normalizer_list=[build_normalizer(name) for name in normalizers],
+        dimension_reduction_list=[build_reducer(name) for name in reducers],
+        feature_selector_list=[build_selector(name) for name in selectors],
+        feature_selector_num_list=feature_numbers,
+        classifier_list=[build_classifier(name, seeds) for name in classifiers],
         cv=ArbitratyCrossValidation(args.cv),
         hyper_param=hyper_params,
         random_seed=seeds,
@@ -353,17 +419,31 @@ def run_bc(args):
             split_note,
         )
     )
+    print(
+        "[FAE] grid: {} normalizer x {} reducer x {} selector x {} feature number x "
+        "{} classifier = {} models".format(
+            len(normalizers),
+            len(reducers),
+            len(selectors),
+            len(feature_numbers),
+            len(classifiers),
+            grid_size,
+        )
+    )
 
     started = time.time()
+    print_every = 1 if grid_size <= 20 else max(1, grid_size // 20)
     for total, done in manager.Run(train, test, store_folder=str(output)):
-        if not args.quiet:
+        if not args.quiet and (done == total or done % print_every == 0):
             print("[FAE] pipeline {}/{}".format(done, total), flush=True)
 
     elapsed = time.time() - started
     print("[FAE] finished in {:.1f}s".format(elapsed))
 
-    _print_table(output / "cv_val_results.csv", "CV_VAL")
-    _print_table(output / "test_results.csv", "TEST")
+    summary = _write_summary(output)
+    if summary is not None and not summary.empty:
+        print("\n[SUMMARY] sorted by test AUC")
+        print(summary.reset_index().to_string(index=False))
 
     config = {
         "fae_version": __version__,
@@ -375,11 +455,12 @@ def run_bc(args):
         "test_ratio": args.test_ratio,
         "seed": args.seed,
         "balance": args.balance,
-        "normalizer": args.normalizer,
-        "reducer": args.reducer,
-        "selector": args.selector,
-        "feature_numbers": list(args.feature_numbers),
-        "classifier": args.classifier,
+        "normalizers": normalizers,
+        "reducers": reducers,
+        "selectors": selectors,
+        "feature_numbers": feature_numbers,
+        "classifiers": classifiers,
+        "grid_size": grid_size,
         "cv": args.cv,
         "hyper_param_dir": str(Path(args.hyper_param_dir).expanduser().resolve())
         if args.hyper_param_dir
