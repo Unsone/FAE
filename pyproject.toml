@@ -1,0 +1,36 @@
+[project]
+name = "fae"
+version = "0.8.2"
+description = "FeAture Explorer (FAE): headless CLI plus optional Qt GUI for radiomics modelling"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "numpy==2.0.2",
+    "pandas==2.2.3",
+    "scipy==1.15.3",
+    "scikit-learn==1.7.2",
+    "imbalanced-learn==0.14.1",
+    "shap==0.49.1",
+    "lifelines==0.30.0",
+    "scikit-survival==0.25.0",
+    "matplotlib==3.10.0",
+    "seaborn==0.13.2",
+    "statsmodels==0.14.4",
+    "PyYAML==6.0.2",
+]
+
+[project.optional-dependencies]
+gui = [
+    "PySide6==6.11.0",
+    "SimpleITK==2.4.0",
+    "pingouin==0.5.5",
+    "reportlab==4.2.5",
+    "pdfdocument==4.0.0",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

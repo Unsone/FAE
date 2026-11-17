@@ -1,3 +1,3 @@
-conda create -n fae python=3.11
+conda create -n fae python=3.11 -y
 conda activate fae
-pip install numpy scipy matplotlib pandas pillow pyside6 pyqtgraph pyradiomics seaborn reportlab imbalanced-learn pdfdocument statsmodels lifelines pyinstaller scikit-learn shap
+pip install -r requirements-gui.txt
