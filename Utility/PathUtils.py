@@ -28,8 +28,18 @@ def get_resource_path(*parts):
 
 
 def get_user_data_root():
-    local_app_data = os.environ.get('LOCALAPPDATA')
-    base_dir = Path(local_app_data) if local_app_data else get_app_root()
+    """Return a per-user directory for logs and copied config files.
+
+    Uses the platform convention instead of the repository folder, so a
+    headless run never writes into the checkout.
+    """
+    if sys.platform.startswith('win'):
+        base = os.environ.get('LOCALAPPDATA') or os.environ.get('APPDATA')
+        base_dir = Path(base) if base else Path.home()
+    else:
+        base = os.environ.get('XDG_DATA_HOME')
+        base_dir = Path(base) if base else Path.home() / '.local' / 'share'
+
     user_data_root = base_dir / APP_NAME
     user_data_root.mkdir(parents=True, exist_ok=True)
     return user_data_root
